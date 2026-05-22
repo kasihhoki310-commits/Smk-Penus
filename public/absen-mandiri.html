@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absensi Mandiri - Guru</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1>📋 Absensi Mandiri Guru</h1>
+                <a href="index.html" class="btn-admin">Kembali</a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div id="guruDetail" style="text-align: center; margin-bottom: 30px; background: white; padding: 20px; border-radius: 8px;">
+                <!-- Detail guru akan dimuat di sini -->
+            </div>
+
+            <div style="max-width: 600px; margin: 0 auto;">
+                <!-- Absensi Masuk -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3>📥 Absensi Masuk</h3>
+                    <video id="videoMasuk" width="100%" style="border-radius: 8px; margin-bottom: 10px; background: #000; max-height: 400px;"></video>
+                    <canvas id="canvasMasuk" style="display:none;"></canvas>
+                    <button class="btn-primary" onclick="startCameraMasuk()">📷 Buka Kamera</button>
+                    <button class="btn-primary" onclick="ambilFotoMasuk()" id="takeMasukBtn" style="display:none;">📸 Ambil Foto</button>
+                    <img id="previewMasuk" src="" style="display:none; width:100%; margin-top:10px; border-radius:8px;">
+                    <p id="lokasiMasuk" style="font-size:12px; color:#666; margin-top:10px;"></p>
+                    <button class="btn-success" id="submitMasukBtn" onclick="submitMasuk()" style="display:none;">✅ Konfirmasi Masuk</button>
+                </div>
+
+                <!-- Absensi Pulang -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3>📤 Absensi Pulang</h3>
+                    <video id="videoPulang" width="100%" style="border-radius: 8px; margin-bottom: 10px; background: #000; max-height: 400px;"></video>
+                    <canvas id="canvasPulang" style="display:none;"></canvas>
+                    <button class="btn-primary" onclick="startCameraPulang()">📷 Buka Kamera</button>
+                    <button class="btn-primary" onclick="ambilFotoPulang()" id="takePulangBtn" style="display:none;">📸 Ambil Foto</button>
+                    <img id="previewPulang" src="" style="display:none; width:100%; margin-top:10px; border-radius:8px;">
+                    <p id="lokasiPulang" style="font-size:12px; color:#666; margin-top:10px;"></p>
+                    <button class="btn-success" id="submitPulangBtn" onclick="submitPulang()" style="display:none;">✅ Konfirmasi Pulang</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api';
+        let guruId = null;
+        let currentLokasi = null;
+        let fotoMasuk = null;
+        let fotoPulang = null;
+        let streamMasuk = null;
+        let streamPulang = null;
+
+        // Get Guru ID from URL
+        window.addEventListener('load', () => {
+            const path = window.location.pathname;
+            guruId = path.split('/').pop();
+            loadGuruDetail();
+            getLocation();
+        });
+
+        async function loadGuruDetail() {
+            try {
+                const response = await fetch(`${API_BASE}/guru/${guruId}`);
+                const guru = await response.json();
+                
+                document.getElementById('guruDetail').innerHTML = `
+                    <h2>${guru.nama}</h2>
+                    <p>NIP: ${guru.nip || 'N/A'}</p>
+                    <p>Email: ${guru.email || 'N/A'}</p>
+                `;
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Guru tidak ditemukan');
+            }
+        }
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        currentLokasi = `${latitude},${longitude}`;
+                        document.getElementById('lokasiMasuk').textContent = `📍 Lat: ${latitude.toFixed(4)}, Long: ${longitude.toFixed(4)}`;
+                        document.getElementById('lokasiPulang').textContent = `📍 Lat: ${latitude.toFixed(4)}, Long: ${longitude.toFixed(4)}`;
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        currentLokasi = 'Tidak tersedia';
+                        document.getElementById('lokasiMasuk').textContent = '📍 Lokasi tidak tersedia';
+                        document.getElementById('lokasiPulang').textContent = '📍 Lokasi tidak tersedia';
+                    }
+                );
+            }
+        }
+
+        function startCameraMasuk() {
+            const video = document.getElementById('videoMasuk');
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+                .then(stream => {
+                    streamMasuk = stream;
+                    video.srcObject = stream;
+                    document.getElementById('takeMasukBtn').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Camera error:', error);
+                    alert('Tidak dapat mengakses kamera');
+                });
+        }
+
+        function startCameraPulang() {
+            const video = document.getElementById('videoPulang');
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+                .then(stream => {
+                    streamPulang = stream;
+                    video.srcObject = stream;
+                    document.getElementById('takePulangBtn').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Camera error:', error);
+                    alert('Tidak dapat mengakses kamera');
+                });
+        }
+
+        function ambilFotoMasuk() {
+            const video = document.getElementById('videoMasuk');
+            const canvas = document.getElementById('canvasMasuk');
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            fotoMasuk = canvas.toDataURL('image/jpeg');
+            document.getElementById('previewMasuk').src = fotoMasuk;
+            document.getElementById('previewMasuk').style.display = 'block';
+            document.getElementById('submitMasukBtn').style.display = 'block';
+            
+            if (streamMasuk) {
+                streamMasuk.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        function ambilFotoPulang() {
+            const video = document.getElementById('videoPulang');
+            const canvas = document.getElementById('canvasPulang');
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            fotoPulang = canvas.toDataURL('image/jpeg');
+            document.getElementById('previewPulang').src = fotoPulang;
+            document.getElementById('previewPulang').style.display = 'block';
+            document.getElementById('submitPulangBtn').style.display = 'block';
+            
+            if (streamPulang) {
+                streamPulang.getTracks().forEach(track => track.stop());
+            }
+        }
+
+        async function submitMasuk() {
+            if (!fotoMasuk) return alert('Ambil foto terlebih dahulu');
+            
+            try {
+                const formData = new FormData();
+                formData.append('guru_id', guruId);
+                formData.append('tipe', 'masuk');
+                formData.append('lokasi', currentLokasi);
+                
+                const blob = await fetch(fotoMasuk).then(r => r.blob());
+                formData.append('foto', blob, 'masuk.jpg');
+                
+                const response = await fetch(`${API_BASE}/absensi`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    alert('✅ Absensi masuk berhasil dicatat');
+                    document.getElementById('videoMasuk').style.display = 'none';
+                    document.getElementById('takeMasukBtn').style.display = 'none';
+                    document.getElementById('submitMasukBtn').style.display = 'none';
+                } else {
+                    alert('❌ Gagal mencatat absensi');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function submitPulang() {
+            if (!fotoPulang) return alert('Ambil foto terlebih dahulu');
+            
+            try {
+                const formData = new FormData();
+                formData.append('guru_id', guruId);
+                formData.append('tipe', 'pulang');
+                formData.append('lokasi', currentLokasi);
+                
+                const blob = await fetch(fotoPulang).then(r => r.blob());
+                formData.append('foto', blob, 'pulang.jpg');
+                
+                const response = await fetch(`${API_BASE}/absensi`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    alert('✅ Absensi pulang berhasil dicatat');
+                    document.getElementById('videoPulang').style.display = 'none';
+                    document.getElementById('takePulangBtn').style.display = 'none';
+                    document.getElementById('submitPulangBtn').style.display = 'none';
+                } else {
+                    alert('❌ Gagal mencatat absensi');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
